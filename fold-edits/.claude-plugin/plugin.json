@@ -1,0 +1,6 @@
+{
+  "name": "fold-edits",
+  "version": "0.1.0",
+  "description": "Fold Edit and Write diffs into one line with a button to show the code",
+  "types": "./types/index.d.ts"
+}
