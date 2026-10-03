@@ -2,6 +2,11 @@
 
 My mods for [Claude Code](https://claude.com/claude-code). A mod is a Claude Code plugin made of function hooks: a TypeScript module that can redraw parts of the terminal, add slash commands, or act on tool calls.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="fold-edits/docs/fold-edits-dark.svg">
+  <img alt="fold-edits: an edit folded to one line with a green show diff button, then opened with hide buttons above and below the diff" src="fold-edits/docs/fold-edits-light.svg">
+</picture>
+
 ## Mods
 
 | Mod | What it does |

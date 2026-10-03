@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="779" height="308" viewBox="0 0 779 308" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" xml:space="preserve" role="img" aria-label="fold-edits: an edit folded to one line with a green show diff button, then opened with hide buttons above and below the diff">
+  <rect x="0.5" y="0.5" width="778" height="307" rx="8" fill="#16181d" stroke="#2b2f36"/>
+  <text x="20.0" y="38" fill="#8b919a" textLength="134.4" lengthAdjust="spacingAndGlyphs">Folded (default)</text>
+  <circle cx="24" cy="61" r="4" fill="#3b9cff"/>
+  <text x="36.8" y="66" fill="#e6e6e6" font-weight="700" textLength="50.4" lengthAdjust="spacingAndGlyphs">Update</text>
+  <text x="87.2" y="66" fill="#e6e6e6" textLength="126.0" lengthAdjust="spacingAndGlyphs">(src/invite.ts)</text>
+  <text x="36.8" y="88" fill="#8b919a" textLength="268.8" lengthAdjust="spacingAndGlyphs">⎿  Updated src/invite.ts (+1 -1)</text>
+  <rect x="314.0" y="73" width="109.2" height="20" rx="3" fill="#116329"/><text x="322.4" y="88" fill="#e6e6e6" textLength="92.4" lengthAdjust="spacingAndGlyphs">▸ show diff</text>
+  <line x1="20" y1="106" x2="759.2" y2="106" stroke="#2b2f36"/>
+  <text x="20.0" y="124" fill="#8b919a" textLength="201.6" lengthAdjust="spacingAndGlyphs">After clicking show diff</text>
+  <circle cx="24" cy="147" r="4" fill="#3b9cff"/>
+  <text x="36.8" y="152" fill="#e6e6e6" font-weight="700" textLength="50.4" lengthAdjust="spacingAndGlyphs">Update</text>
+  <text x="87.2" y="152" fill="#e6e6e6" textLength="126.0" lengthAdjust="spacingAndGlyphs">(src/invite.ts)</text>
+  <text x="36.8" y="174" fill="#8b919a" textLength="268.8" lengthAdjust="spacingAndGlyphs">⎿  Updated src/invite.ts (+1 -1)</text>
+  <rect x="314.0" y="159" width="67.2" height="20" rx="3" fill="#116329"/><text x="322.4" y="174" fill="#e6e6e6" textLength="50.4" lengthAdjust="spacingAndGlyphs">▾ hide</text>
+  <text x="70.4" y="196" fill="#6b7280" textLength="16.8" lengthAdjust="spacingAndGlyphs">37</text>
+  <text x="112.4" y="196" fill="#e6e6e6" textLength="16.8" lengthAdjust="spacingAndGlyphs">};</text>
+  <rect x="62.0" y="203" width="697.2" height="22" fill="#4a1f22"/>
+  <text x="70.4" y="218" fill="#ff9a9a" textLength="33.6" lengthAdjust="spacingAndGlyphs">38 -</text>
+  <text x="112.4" y="218" fill="#ff9a9a" textLength="487.2" lengthAdjust="spacingAndGlyphs">const answer = await requestInvite(deps, { email, from });</text>
+  <rect x="62.0" y="225" width="697.2" height="22" fill="#163a24"/>
+  <text x="70.4" y="240" fill="#7ee2a0" textLength="33.6" lengthAdjust="spacingAndGlyphs">38 +</text>
+  <text x="112.4" y="240" fill="#7ee2a0" textLength="621.6" lengthAdjust="spacingAndGlyphs">const answer = await requestInvite(deps, { email, from, consent: &quot;yes&quot; });</text>
+  <text x="70.4" y="262" fill="#6b7280" textLength="16.8" lengthAdjust="spacingAndGlyphs">39</text>
+  <text x="112.4" y="262" fill="#e6e6e6" textLength="117.6" lengthAdjust="spacingAndGlyphs">return answer;</text>
+  <rect x="62.0" y="273" width="67.2" height="20" rx="3" fill="#116329"/><text x="70.4" y="288" fill="#e6e6e6" textLength="50.4" lengthAdjust="spacingAndGlyphs">▾ hide</text>
+</svg>

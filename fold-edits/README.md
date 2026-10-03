@@ -2,11 +2,12 @@
 
 Claude Code prints the full diff under every Edit and Write call. A long session fills the screen with code you did not ask to read.
 
-This mod replaces each diff with one line:
+This mod replaces each diff with one line and a button that opens it:
 
-```
-Updated src/app.ts (+4 -1) [▸ show diff]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/fold-edits-dark.svg">
+  <img alt="fold-edits: an edit folded to one line with a green show diff button, then opened with hide buttons above and below the diff" src="docs/fold-edits-light.svg">
+</picture>
 
 Click **show diff** to open the diff. Click **hide** to fold it again. When the diff is open, a hide button sits at both the top and the bottom, so you do not have to scroll back up on a long diff.
 
@@ -25,6 +26,10 @@ A plugin cannot set a button's text color, so the mod picks the green behind the
 - Light themes get `#aceebb`, with dark text on top.
 
 If the mod cannot read the theme setting, it uses the dark green.
+
+## Images
+
+`docs/make_svgs.py` draws the two README images, one per theme. GitHub shows the one that matches the reader's theme. Run it again after a change to how the mod looks.
 
 ## Tests
 
