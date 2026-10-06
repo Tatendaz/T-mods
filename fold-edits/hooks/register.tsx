@@ -1,7 +1,7 @@
 import { atom, memberOf, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { FileResult, Hunk } from '../types'
+import type { BashEditDiff, FileResult, Hunk } from '../types'
 
 const FOLDED_TOOLS = ['Edit', 'Write', 'NotebookEdit']
 // A Code element takes at most 10000 characters; leave room for the hunk header.
@@ -93,6 +93,40 @@ export function summarize(output: FileResult): { verb: string; path: string; add
   }
 }
 
+// The session's folder, so a Bash diff names its files as the engine does.
+let cwd = ''
+
+function relative(path: string): string {
+  return cwd !== '' && path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path
+}
+
+// A shell command that changed files carries their diff in `bashEditDiff`.
+export function bashDiff(output: unknown): BashEditDiff | null {
+  if (typeof output !== 'object' || output === null || !('bashEditDiff' in output)) return null
+  const diff = (output as { bashEditDiff?: BashEditDiff }).bashEditDiff
+  if (!diff || !Array.isArray(diff.files) || diff.files.length === 0) return null
+
+  return diff
+}
+
+export function summarizeBash(diff: BashEditDiff) {
+  return diff.files
+    .map(file => {
+      let added = 0
+      let removed = 0
+      for (const hunk of file.hunks) {
+        for (const line of hunk.lines) {
+          if (line.startsWith('+')) added += 1
+          else if (line.startsWith('-')) removed += 1
+        }
+      }
+      const verb = file.created ? 'Created' : file.deleted ? 'Deleted' : 'Updated'
+
+      return { verb, path: relative(file.filePath), added, removed, chunks: diffChunks(file.hunks) }
+    })
+    .filter(file => file.chunks.length > 0)
+}
+
 async function pillColor($: { config: { list: () => Promise<ReadonlyArray<{ key: string; value: unknown }>> } }): Promise<string> {
   let theme: unknown
   try {
@@ -109,6 +143,67 @@ function isFoldable(tool: string, isErrored: boolean, output: unknown): output i
 }
 
 export const register: Register = on => {
+  on('session.start', async ($, e, next) => {
+    cwd = e.cwd
+
+    return next(e)
+  })
+
+  // A shell command that wrote files (a script, sed, a heredoc): the engine
+  // draws its output and then the full diff. Keep the output, fold the diff.
+  on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
+    const output = e.props.output
+    const diff = e.props.tool === 'Bash' && !e.props.isErrored ? bashDiff(output) : null
+    const files = diff ? summarizeBash(diff) : []
+    if (!diff || files.length === 0) {
+      return next(e)
+    }
+
+    const { bashEditDiff: _diff, ...rest } = output as Record<string, unknown>
+    const base = await next({ ...e, props: { ...e.props, output: rest } })
+
+    const open = memberOf(isOpen, e)
+    const isShown = await read($, open)
+    const green = await pillColor($)
+    const { Box, Button, Code, Text } = $.ui.resolve(e)
+    const toggle = () => update($, open, value => !value)
+    const added = files.reduce((sum, file) => sum + file.added, 0)
+    const removed = files.reduce((sum, file) => sum + file.removed, 0)
+    const what = files.length === 1 ? `${files[0]!.verb} ${files[0]!.path}` : `Changed ${files.length} files`
+    const more = diff.moreFiles > 0 ? `, ${diff.moreFiles} more not shown` : ''
+    const pill = (key: string) => (
+      <Box key={`${key}-pill`} backgroundColor={green} paddingX={1}>
+        <Button key={key} plain label={isShown ? '▾ hide' : '▸ show diff'} onPress={toggle} />
+      </Box>
+    )
+
+    return (
+      <Box flexDirection="column">
+        {base}
+        <Box>
+          <Text dimColor>
+            {what} (+{added} -{removed}{more}){' '}
+          </Text>
+          {pill('toggle')}
+        </Box>
+        {isShown &&
+          files.map(file => (
+            <Box flexDirection="column">
+              {files.length > 1 && (
+                <Text dimColor>
+                  {file.verb} {file.path} (+{file.added} -{file.removed})
+                </Text>
+              )}
+              {file.chunks.map(source => (
+                <Code source={source} format="diff" path={file.path} />
+              ))}
+            </Box>
+          ))}
+        {isShown && <Box>{pill('toggle-bottom')}</Box>}
+      </Box>
+    )
+  })
+
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
     const output = e.props.output
     if (!isFoldable(e.props.tool, e.props.isErrored, output)) {

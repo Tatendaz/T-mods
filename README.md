@@ -11,7 +11,7 @@ My mods for [Claude Code](https://claude.com/claude-code). A mod is a Claude Cod
 
 | Mod | What it does |
 | --- | --- |
-| [fold-edits](fold-edits/) | Folds every Edit and Write diff into one line, with a green button that opens the diff. |
+| [fold-edits](fold-edits/) | Folds every Edit and Write diff, and the diff under a shell command that changed files, into one line, with a green button that opens the diff. |
 
 ## Install
 

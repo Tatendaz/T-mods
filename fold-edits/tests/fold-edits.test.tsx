@@ -96,4 +96,42 @@ describe('fold-edits', () => {
     expect(await ui.find({ type: 'Text', text: /engine row/ })).toBeDefined()
     await ui.unmount()
   })
+
+  test('a shell command that changed files keeps its output and folds the diff', async ($, on) => {
+    const seen: unknown[] = []
+    on('ui.render', ($, e) => {
+      seen.push((e.props as { output?: unknown }).output)
+      const { Text } = $.ui.resolve(e)
+      return <Text>engine row</Text>
+    })
+    on('session.start', async (_$, e) => ({ cwd: e.cwd, sessionId: 's1' }) as never)
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true } as never)
+    const bashEditDiff = {
+      files: [
+        { filePath: '/repo/src/a.ts', hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ['-x', '+y', '+z'] }] },
+        { filePath: '/repo/src/b.ts', created: true, hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines: ['+new'] }] },
+      ],
+      moreFiles: 0,
+    }
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await $.ui.mount({
+        plugin: 'fold-edits',
+        surface,
+        component: 'ToolResult',
+        props: { tool_use_id: `b-${surface}`, tool: 'Bash', output: { stdout: 'done', stderr: '', interrupted: false, bashEditDiff }, isErrored: false },
+      })
+      expect(await ui.find({ type: 'Text', text: /engine row/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /Changed 2 files \(\+3 -1\)/ })).toBeDefined()
+      expect(await ui.find({ type: 'Code' })).toBeUndefined()
+
+      await ui.press({ key: 'toggle' })
+      expect(await ui.find({ type: 'Text', text: /Created src\/b\.ts \(\+1 -0\)/ })).toBeDefined()
+      expect((await ui.find({ type: 'Code' }))?.props.path).toBe('src/a.ts')
+      await ui.press({ key: 'toggle-bottom' })
+      expect(await ui.find({ type: 'Code' })).toBeUndefined()
+      await ui.unmount()
+    }
+    // The engine drew the output without the diff, so it is not shown twice.
+    expect(seen.some(output => typeof output === 'object' && output !== null && 'bashEditDiff' in output)).toBe(false)
+  })
 })

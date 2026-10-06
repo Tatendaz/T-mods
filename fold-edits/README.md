@@ -15,6 +15,7 @@ Click **show diff** to open the diff. Click **hide** to fold it again. When the 
 
 - Edit, Write and NotebookEdit results. A failed edit is left as Claude Code draws it.
 - Groups that hold only edits, such as Claude Code's "Made 1 scratchpad edit" line. A group that mixes edits with reads or shell commands is left alone.
+- Shell commands that change files, such as a script, `sed -i` or a heredoc. Claude Code shows the command's output and then the full diff. The mod keeps the output and folds the diff into one line, for example "Changed 2 files (+3 -1)".
 
 A diff longer than 10,000 characters, the limit for one code block, is split into several blocks. Line numbers stay correct across the split.
 
@@ -37,4 +38,4 @@ If the mod cannot read the theme setting, it uses the dark green.
 claude plugin test ~/.claude/mods/fold-edits
 ```
 
-The tests cover the summary line, opening and closing the diff, both button colors, diff splitting, edit-only groups, and leaving other tools alone.
+The tests cover the summary line, opening and closing the diff, both button colors, diff splitting, edit-only groups, shell commands that change files, and leaving other tools alone.

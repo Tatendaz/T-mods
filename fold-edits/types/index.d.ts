@@ -14,6 +14,12 @@ export type FileResult = {
   structuredPatch?: Hunk[]
 }
 
+/** The part of a Bash result that holds the files the command changed. */
+export type BashEditDiff = {
+  files: { filePath: string; hunks: Hunk[]; created?: true; deleted?: true }[]
+  moreFiles: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'fold-edits': { isOpen: StateFamily<boolean> }
