@@ -17,7 +17,15 @@ export type MergeTarget = {
   /** The directory a `cd` before the merge moved to. */
   cwd?: string
   isAdmin: boolean
+  /** The SHA a `--match-head-commit` already pins, if any. */
+  matchHead?: string
 }
+
+export type MergeScan = { kind: 'none' } | { kind: 'refuse'; reason: string } | { kind: 'merge'; target: MergeTarget }
+
+const WRAPPERS = new Set(['command', 'exec', 'env', 'sudo', 'nohup', 'time', 'builtin'])
+const PR_MERGE = /\bpr\s+merge\b/g
+const OTHER_MERGE = /mergePullRequest|pulls\/[^\s/'"]+\/merge\b/i
 
 /** Splits a shell line into words, keeping quoted runs whole. */
 export function words(text: string): string[] {
@@ -26,22 +34,41 @@ export function words(text: string): string[] {
   return out
 }
 
-/** Finds a `gh pr merge` in a Bash command, with its PR, repo and the `cd` before it. */
-export function parseMerge(command: string): MergeTarget | null {
+/**
+ * Finds the one `gh pr merge` a Bash command runs, with its PR, repo and the
+ * `cd` before it. It fails closed: a merge it cannot read plainly (more than
+ * one, one inside `bash -c` or `$(...)`, a REST or GraphQL merge, GH_HOST set)
+ * is refused rather than let through unchecked.
+ */
+export function scanMerge(command: string): MergeScan {
+  const merges: MergeTarget[] = []
   let cwd: string | undefined
   for (const segment of command.split(/&&|\|\||;|\n|\|/)) {
     const w = words(segment.trim())
-    while (w.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]!)) w.shift()
-    if (w[0] === 'command' || w[0] === 'exec') w.shift()
-    if (w[0] === 'cd' && w[1]) cwd = w[1]
-    if (w[0] !== 'gh' || w[1] !== 'pr' || w[2] !== 'merge') continue
-    const target: MergeTarget = { isAdmin: false, ...(cwd ? { cwd } : {}) }
+    const env: Record<string, string> = {}
+    for (;;) {
+      if (w.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]!)) {
+        const [key, ...value] = w.shift()!.split('=')
+        env[key!] = value.join('=')
+      } else if (w.length > 0 && WRAPPERS.has(w[0]!)) w.shift()
+      else break
+    }
+    const exe = (w[0] ?? '').split('/').pop()
+    if (exe === 'cd' && w[1]) cwd = w[1]
+    if (exe !== 'gh' || w[1] !== 'pr' || w[2] !== 'merge') continue
+    if (env.GH_HOST !== undefined || env.GH_ENTERPRISE_TOKEN !== undefined) {
+      return { kind: 'refuse', reason: 'merge-gate: GH_HOST is set in front of the merge, so the gate cannot check the same PR gh would merge.' }
+    }
+    const target: MergeTarget = { isAdmin: false, ...(cwd ? { cwd } : {}), ...(env.GH_REPO ? { repo: env.GH_REPO } : {}) }
     for (let i = 3; i < w.length; i++) {
       const word = w[i]!
       if (word === '--repo' || word === '-R') target.repo = w[++i]
       else if (word.startsWith('--repo=')) target.repo = word.slice(7)
-      else if (word === '--admin') target.isAdmin = true
-      else if (/^-(b|t|-body|-subject|-body-file|F|-match-head-commit|A|-author-email)$/.test(word)) i++
+      else if (word.startsWith('-R') && word.length > 2) target.repo = word.slice(2).replace(/^=/, '')
+      else if (/^--admin(=|$)/.test(word)) target.isAdmin = true
+      else if (word === '--match-head-commit') target.matchHead = w[++i]
+      else if (word.startsWith('--match-head-commit=')) target.matchHead = word.slice(20)
+      else if (/^-(b|t|-body|-subject|-body-file|F|A|-author-email)$/.test(word)) i++
       else if (!word.startsWith('-') && target.pr === undefined) target.pr = word
     }
     const url = target.pr?.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/)
@@ -49,14 +76,26 @@ export function parseMerge(command: string): MergeTarget | null {
       target.repo = url[1]
       target.pr = url[2]
     }
-    return target
+    merges.push(target)
   }
-  return null
+
+  const hidden = (command.match(PR_MERGE) ?? []).length > merges.length || OTHER_MERGE.test(command)
+  if (merges.length > 1) return { kind: 'refuse', reason: 'merge-gate: one `gh pr merge` per command, so each PR is checked.' }
+  if (hidden) {
+    return {
+      kind: 'refuse',
+      reason:
+        'merge-gate: this command merges in a way the gate cannot check (inside another command, through the REST or GraphQL API, or more than once). ' +
+        'Run `gh pr merge <n> --squash --delete-branch` on its own. If the text only mentions a merge, write it with a file tool instead.',
+    }
+  }
+  return merges.length === 1 ? { kind: 'merge', target: merges[0]! } : { kind: 'none' }
 }
 
-/** True when a command merges through the REST API, which would skip this gate. */
-export function isApiMerge(command: string): boolean {
-  return /\bgh\s+api\b[^\n]*pulls\/\d+\/merge\b/.test(command)
+/** Pins the merge to the head that was checked, so gh refuses it if a push lands in between. */
+export function pinHead(command: string, sha: string): string {
+  if (/--match-head-commit/.test(command)) return command
+  return command.replace(/((?:^|[\s;&|(])(?:\S*\/)?gh\s+pr\s+merge)\b/, `$1 --match-head-commit ${sha}`)
 }
 
 type Check = {
@@ -117,7 +156,7 @@ type Pr = {
   comments: { body: string }[]
 }
 
-export type Verdict = { isClean: true; summary: string } | { isClean: false; problems: string[]; hint?: string }
+export type Verdict = { isClean: true; summary: string; headSha: string } | { isClean: false; problems: string[]; hint?: string }
 
 /** Judges a PR against the merge rule from what gh and coderabbit_status.py reported. */
 export function judge(pr: Pr, review: Review, needsAstra: boolean): Verdict {
@@ -150,7 +189,7 @@ export function judge(pr: Pr, review: Review, needsAstra: boolean): Verdict {
   }
 
   if (problems.length > 0) return { isClean: false, problems, ...(hint ? { hint } : {}) }
-  return { isClean: true, summary: `#${pr.number} at ${pr.headRefOid.slice(0, 7)}: CI green, reviewed, 0 open threads` }
+  return { isClean: true, headSha: pr.headRefOid, summary: `#${pr.number} at ${pr.headRefOid.slice(0, 7)}: CI green, reviewed, 0 open threads` }
 }
 
 async function home($: EngineInterface): Promise<string> {
@@ -222,11 +261,10 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (isApiMerge(e.command)) {
-      return { deny: 'merge-gate: merge with `gh pr merge <n> --squash --delete-branch`, so the merge rule is checked. The REST merge endpoint skips it.' }
-    }
-    const target = parseMerge(e.command)
-    if (!target) return next(e)
+    const scan = scanMerge(e.command)
+    if (scan.kind === 'none') return next(e)
+    if (scan.kind === 'refuse') return { deny: scan.reason }
+    const target = scan.target
     if (target.isAdmin) return { deny: 'merge-gate: --admin bypasses branch rules. The owner never allows it.' }
 
     const verdict = await check($, target, astraRepos)
@@ -234,8 +272,11 @@ export const register: Register = (on, options) => {
       const list = verdict.problems.map(p => `- ${p}`).join('\n')
       return { deny: `merge-gate: not clean, so not merged.\n${list}${verdict.hint ? `\n${verdict.hint}` : ''}` }
     }
+    if (target.matchHead !== undefined && target.matchHead !== verdict.headSha) {
+      return { deny: `merge-gate: --match-head-commit ${target.matchHead} is not the head that was checked (${verdict.headSha.slice(0, 7)}).` }
+    }
     $.ui.toast(`merge-gate: ${verdict.summary}`)
-    return next(e)
+    return next({ ...e, command: pinHead(e.command, verdict.headSha) })
   }).catch(($, e, next) =>
     next.called
       ? next(e)

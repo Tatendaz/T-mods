@@ -13,7 +13,15 @@ Before any Bash command that runs `gh pr merge`, it reads the PR with `gh pr vie
 - Not a Night Shift PR (its body links `ideas-inbox#17`).
 - On repos listed in `astraRepos`, the body or a comment holds `Astra review: <n> findings`.
 
-It also refuses `gh pr merge --admin`, and `gh api .../pulls/<n>/merge`, which would skip the check.
+It fails closed on any merge it cannot read plainly, and refuses:
+
+- `--admin` in any form, including `--admin=true`.
+- More than one `gh pr merge` in one command.
+- A merge inside another command (`bash -c "..."`, `$(...)`) or any text with more `pr merge` mentions than plain merges. A commit message or `echo` that only mentions a merge is refused too; write such text with a file tool.
+- A REST merge (`pulls/<n>/merge`) or a GraphQL `mergePullRequest`.
+- `GH_HOST` set in front of the merge. `GH_REPO` in front is read and checked as the repo.
+
+When the PR is clean, the command that runs gets `--match-head-commit <checked sha>`, so gh refuses the merge if a push lands between the check and the merge. A `--match-head-commit` already in the command must name the checked head.
 
 When the review is missing, the refusal includes the `coderabbit_budget.py run` command to request one and the `failover` command to run on exit 75.
 
@@ -36,7 +44,7 @@ None. It runs `gh` and two local Python scripts, and makes no model call.
 
 ## Tests
 
-`tests/merge-gate.test.ts` covers command parsing, the superseded-run rule, each refusal reason, and the Bash hook end to end with a fake `gh`. The live merge path has not been run: the auto-mode classifier refused a test merge of an already-merged PR.
+`tests/merge-gate.test.ts` covers command parsing, each bypass the gate refuses, the head pin, the superseded-run rule, each refusal reason, and the Bash hook end to end with a fake `gh`. The live merge path has not been run: the auto-mode classifier refused a test merge of an already-merged PR.
 
 ```sh
 claude plugin test ~/.claude/mods/merge-gate

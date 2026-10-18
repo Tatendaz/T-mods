@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { isApiMerge, judge, parseMerge, redChecks } from '../hooks/register'
+import { judge, pinHead, redChecks, scanMerge } from '../hooks/register'
+
+const targetOf = (command: string) => {
+  const scan = scanMerge(command)
+  return scan.kind === 'merge' ? scan.target : scan.kind
+}
 
 const HEAD = '4b6c22173a1b661edf407b8e69f75f6f255aa8b9'
 
@@ -29,24 +34,45 @@ function fakeGh(pr: object, review: object) {
   }
 }
 
-describe('parseMerge', () => {
+describe('scanMerge', () => {
   test('reads the PR, repo and cd before the merge', () => {
-    expect(parseMerge('cd ~/Projects/openlink && gh pr merge 138 --repo Tatendaz/builtby --squash --delete-branch')).toEqual({
+    expect(targetOf('cd ~/Projects/openlink && gh pr merge 138 --repo Tatendaz/builtby --squash --delete-branch')).toEqual({
       isAdmin: false,
       cwd: '~/Projects/openlink',
       pr: '138',
       repo: 'Tatendaz/builtby',
     })
-    expect(parseMerge('gh pr merge https://github.com/Tatendaz/builtby/pull/9 --squash')).toEqual({ isAdmin: false, pr: '9', repo: 'Tatendaz/builtby' })
-    expect(parseMerge('gh pr merge --squash --admin')).toEqual({ isAdmin: true })
-    expect(parseMerge('gh pr merge 5 -b "done; all good" --squash')?.pr).toBe('5')
+    expect(targetOf('gh pr merge https://github.com/Tatendaz/builtby/pull/9 --squash')).toEqual({ isAdmin: false, pr: '9', repo: 'Tatendaz/builtby' })
+    expect(targetOf('gh pr merge --squash --admin')).toEqual({ isAdmin: true })
+    expect(targetOf('gh pr merge 1 --admin=true')).toMatchObject({ isAdmin: true })
+    expect((targetOf('gh pr merge 5 -b "done; all good" --squash') as { pr?: string }).pr).toBe('5')
   })
 
-  test('ignores commands that only mention a merge', () => {
-    expect(parseMerge('gh pr view 138 --json state')).toBeNull()
-    expect(parseMerge('echo "gh pr merge 1"')).toBeNull()
-    expect(parseMerge('git merge main')).toBeNull()
-    expect(isApiMerge('gh api -X PUT repos/Tatendaz/builtby/pulls/138/merge')).toBe(true)
+  test('reads GH_REPO, a path to gh and wrappers', () => {
+    expect(targetOf('GH_REPO=Tatendaz/other gh pr merge 3')).toMatchObject({ pr: '3', repo: 'Tatendaz/other' })
+    expect(targetOf('GH_REPO=Tatendaz/other gh pr merge 3 -R Tatendaz/builtby')).toMatchObject({ repo: 'Tatendaz/builtby' })
+    expect(targetOf('env FOO=1 /opt/homebrew/bin/gh pr merge 4')).toMatchObject({ pr: '4' })
+    expect(targetOf('gh pr merge 4 --match-head-commit abc')).toMatchObject({ matchHead: 'abc' })
+  })
+
+  test('refuses merges it cannot check plainly', () => {
+    expect(targetOf('gh pr merge 1 && gh pr merge 2')).toBe('refuse')
+    expect(targetOf('gh pr merge 1 && bash -c "gh pr merge 2"')).toBe('refuse')
+    expect(targetOf('bash -c "gh pr merge 2"')).toBe('refuse')
+    expect(targetOf('$(echo gh) pr merge 2')).toBe('refuse')
+    expect(targetOf('GH_HOST=evil.example gh pr merge 2')).toBe('refuse')
+    expect(targetOf('gh api -X PUT repos/Tatendaz/builtby/pulls/138/merge')).toBe('refuse')
+    expect(targetOf('gh api graphql -f query="mutation { mergePullRequest(input: {}) { clientMutationId } }"')).toBe('refuse')
+  })
+
+  test('leaves commands with no merge alone', () => {
+    expect(targetOf('gh pr view 138 --json state')).toBe('none')
+    expect(targetOf('git merge main')).toBe('none')
+  })
+
+  test('pins the merge to the checked head', () => {
+    expect(pinHead('cd x && gh pr merge 5 --squash', 'abc123')).toBe('cd x && gh pr merge --match-head-commit abc123 5 --squash')
+    expect(pinHead('gh pr merge 5 --match-head-commit old', 'abc123')).toBe('gh pr merge 5 --match-head-commit old')
   })
 })
 
@@ -115,6 +141,19 @@ describe('the Bash gate', () => {
     on('process.run', fakeGh(greenPr, cleanReview) as never)
     const ran = (await $.tool.call({ tool: 'Bash', command: 'gh pr merge 147 --repo Tatendaz/builtby --squash' })) as Ran
     expect(denial(ran)).toBeUndefined()
+  })
+
+  test('the merge that runs is pinned to the checked head', async ($, on) => {
+    on('session.cwd' as never, (() => ({ value: '/tmp' })) as never)
+    on('env.get' as never, (() => ({ value: '/Users/test' })) as never)
+    on('process.run', fakeGh(greenPr, cleanReview) as never)
+    let ranCommand = ''
+    on('tool.call' as never, ((_$: unknown, e: { command: string }) => {
+      ranCommand = e.command
+      return { result: 'merged' }
+    }) as never)
+    await $.tool.call({ tool: 'Bash', command: 'gh pr merge 147 --repo Tatendaz/builtby --squash' })
+    expect(ranCommand).toBe(`gh pr merge --match-head-commit ${HEAD} 147 --repo Tatendaz/builtby --squash`)
   })
 
   test('other commands pass untouched, and --admin is refused', async ($, on) => {
