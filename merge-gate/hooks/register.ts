@@ -11,91 +11,76 @@ const ASTRA_LINE = /Astra review:\s*\d+\s+findings?/i
 const GREEN = new Set(['SUCCESS', 'SKIPPED', 'NEUTRAL'])
 
 export type MergeTarget = {
-  /** The PR as typed: a number, a URL or a branch; absent for the current branch's PR. */
+  /** The PR as typed: a number or a PR URL; absent for the current branch's PR. */
   pr?: string
   repo?: string
   /** The directory a `cd` before the merge moved to. */
   cwd?: string
-  isAdmin: boolean
-  /** The SHA a `--match-head-commit` already pins, if any. */
-  matchHead?: string
+  method: '--squash' | '--merge' | '--rebase'
+  deleteBranch: boolean
 }
 
 export type MergeScan = { kind: 'none' } | { kind: 'refuse'; reason: string } | { kind: 'merge'; target: MergeTarget }
 
-const WRAPPERS = new Set(['command', 'exec', 'env', 'sudo', 'nohup', 'time', 'builtin'])
-const PR_MERGE = /\bpr\s+merge\b/g
-const OTHER_MERGE = /mergePullRequest|pulls\/[^\s/'"]+\/merge\b/i
+// Anything that looks like a merge once quotes and backslashes are gone.
+const MERGE_TEXT = /\bpr\s+merge\b|mergePullRequest|\/merge\b|\bgh\s+alias\b/i
+// What a plain merge command may hold: no expansion, substitution, quoting or redirection.
+const PLAIN = /^[A-Za-z0-9_./~:@=,+\- \n&;]*$/
 
-/** Splits a shell line into words, keeping quoted runs whole. */
-export function words(text: string): string[] {
-  const out: string[] = []
-  for (const m of text.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+)/g)) out.push(m[1] ?? m[2] ?? m[3] ?? '')
-  return out
-}
+const PLAIN_FORM =
+  'merge-gate: run the merge on its own in the plain form, `gh pr merge <number> --repo <owner/repo> --squash --delete-branch` ' +
+  '(an optional `cd <dir> &&` before it). The gate checks that form and runs it pinned to the checked head. ' +
+  'If the command only mentions a merge in text, write that text with a file tool.'
 
 /**
- * Finds the one `gh pr merge` a Bash command runs, with its PR, repo and the
- * `cd` before it. It fails closed: a merge it cannot read plainly (more than
- * one, one inside `bash -c` or `$(...)`, a REST or GraphQL merge, GH_HOST set)
- * is refused rather than let through unchecked.
+ * Accepts one form of merge only: optional `cd <dir> &&` segments, then
+ * `gh pr merge [<number>|<url>] [--repo <owner/repo>] [--squash|--merge|--rebase]
+ * [--delete-branch]`, nothing else. Any other command that mentions a merge is
+ * refused. The hook then runs a merge it builds itself from the checked PR,
+ * so nothing the command says beyond these fields reaches gh.
  */
 export function scanMerge(command: string): MergeScan {
-  const merges: MergeTarget[] = []
+  if (!MERGE_TEXT.test(command.replace(/["'\\]/g, ''))) return { kind: 'none' }
+  if (!PLAIN.test(command)) return { kind: 'refuse', reason: PLAIN_FORM }
+
+  const segments = command.split(/&&|;|\n/).map(seg => seg.trim()).filter(Boolean)
+  const merge = segments.pop()!.split(/\s+/)
   let cwd: string | undefined
-  for (const segment of command.split(/&&|\|\||;|\n|\|/)) {
-    const w = words(segment.trim())
-    const env: Record<string, string> = {}
-    for (;;) {
-      if (w.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]!)) {
-        const [key, ...value] = w.shift()!.split('=')
-        env[key!] = value.join('=')
-      } else if (w.length > 0 && WRAPPERS.has(w[0]!)) w.shift()
-      else break
-    }
-    const exe = (w[0] ?? '').split('/').pop()
-    if (exe === 'cd' && w[1]) cwd = w[1]
-    if (exe !== 'gh' || w[1] !== 'pr' || w[2] !== 'merge') continue
-    if (env.GH_HOST !== undefined || env.GH_ENTERPRISE_TOKEN !== undefined) {
-      return { kind: 'refuse', reason: 'merge-gate: GH_HOST is set in front of the merge, so the gate cannot check the same PR gh would merge.' }
-    }
-    const target: MergeTarget = { isAdmin: false, ...(cwd ? { cwd } : {}), ...(env.GH_REPO ? { repo: env.GH_REPO } : {}) }
-    for (let i = 3; i < w.length; i++) {
-      const word = w[i]!
-      if (word === '--repo' || word === '-R') target.repo = w[++i]
-      else if (word.startsWith('--repo=')) target.repo = word.slice(7)
-      else if (word.startsWith('-R') && word.length > 2) target.repo = word.slice(2).replace(/^=/, '')
-      else if (/^--admin(=|$)/.test(word)) target.isAdmin = true
-      else if (word === '--match-head-commit') target.matchHead = w[++i]
-      else if (word.startsWith('--match-head-commit=')) target.matchHead = word.slice(20)
-      else if (/^-(b|t|-body|-subject|-body-file|F|A|-author-email)$/.test(word)) i++
-      else if (!word.startsWith('-') && target.pr === undefined) target.pr = word
-    }
-    const url = target.pr?.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/)
-    if (url) {
+  for (const seg of segments) {
+    const w = seg.split(/\s+/)
+    if (w.length !== 2 || w[0] !== 'cd') return { kind: 'refuse', reason: PLAIN_FORM }
+    cwd = w[1]
+  }
+  if (merge[0] !== 'gh' || merge[1] !== 'pr' || merge[2] !== 'merge') return { kind: 'refuse', reason: PLAIN_FORM }
+
+  const target: MergeTarget = { method: '--squash', deleteBranch: false, ...(cwd ? { cwd } : {}) }
+  let methods = 0
+  for (let i = 3; i < merge.length; i++) {
+    const word = merge[i]!
+    if (word === '--repo' || word === '-R') target.repo = merge[++i]
+    else if (word.startsWith('--repo=')) target.repo = word.slice(7)
+    else if (word === '--squash' || word === '-s') (target.method = '--squash'), methods++
+    else if (word === '--merge' || word === '-m') (target.method = '--merge'), methods++
+    else if (word === '--rebase' || word === '-r') (target.method = '--rebase'), methods++
+    else if (word === '--delete-branch' || word === '-d') target.deleteBranch = true
+    else if (/^\d+$/.test(word) && target.pr === undefined) target.pr = word
+    else {
+      const url = word.match(/^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/)
+      if (!url || target.pr !== undefined) {
+        return { kind: 'refuse', reason: `merge-gate: \`${word}\` is not allowed in a merge. ${word.startsWith('--admin') ? 'The owner never allows --admin.' : PLAIN_FORM}` }
+      }
       target.repo = url[1]
       target.pr = url[2]
     }
-    merges.push(target)
   }
-
-  const hidden = (command.match(PR_MERGE) ?? []).length > merges.length || OTHER_MERGE.test(command)
-  if (merges.length > 1) return { kind: 'refuse', reason: 'merge-gate: one `gh pr merge` per command, so each PR is checked.' }
-  if (hidden) {
-    return {
-      kind: 'refuse',
-      reason:
-        'merge-gate: this command merges in a way the gate cannot check (inside another command, through the REST or GraphQL API, or more than once). ' +
-        'Run `gh pr merge <n> --squash --delete-branch` on its own. If the text only mentions a merge, write it with a file tool instead.',
-    }
-  }
-  return merges.length === 1 ? { kind: 'merge', target: merges[0]! } : { kind: 'none' }
+  if (methods > 1) return { kind: 'refuse', reason: 'merge-gate: pick one of --squash, --merge or --rebase.' }
+  if (target.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(target.repo)) return { kind: 'refuse', reason: PLAIN_FORM }
+  return { kind: 'merge', target }
 }
 
-/** Pins the merge to the head that was checked, so gh refuses it if a push lands in between. */
-export function pinHead(command: string, sha: string): string {
-  if (/--match-head-commit/.test(command)) return command
-  return command.replace(/((?:^|[\s;&|(])(?:\S*\/)?gh\s+pr\s+merge)\b/, `$1 --match-head-commit ${sha}`)
+/** The merge the hook runs: built from the checked PR, pinned to the checked head. */
+export function mergeCommand(repo: string, number: number, sha: string, target: MergeTarget): string {
+  return ['gh', 'pr', 'merge', String(number), '--repo', repo, '--match-head-commit', sha, target.method, ...(target.deleteBranch ? ['--delete-branch'] : [])].join(' ')
 }
 
 type Check = {
@@ -156,7 +141,7 @@ type Pr = {
   comments: { body: string }[]
 }
 
-export type Verdict = { isClean: true; summary: string; headSha: string } | { isClean: false; problems: string[]; hint?: string }
+export type Verdict = { isClean: true; summary: string; headSha: string; number: number; repo: string } | { isClean: false; problems: string[]; hint?: string }
 
 /** Judges a PR against the merge rule from what gh and coderabbit_status.py reported. */
 export function judge(pr: Pr, review: Review, needsAstra: boolean): Verdict {
@@ -189,7 +174,7 @@ export function judge(pr: Pr, review: Review, needsAstra: boolean): Verdict {
   }
 
   if (problems.length > 0) return { isClean: false, problems, ...(hint ? { hint } : {}) }
-  return { isClean: true, headSha: pr.headRefOid, summary: `#${pr.number} at ${pr.headRefOid.slice(0, 7)}: CI green, reviewed, 0 open threads` }
+  return { isClean: true, headSha: pr.headRefOid, number: pr.number, repo, summary: `#${pr.number} at ${pr.headRefOid.slice(0, 7)}: CI green, reviewed, 0 open threads` }
 }
 
 async function home($: EngineInterface): Promise<string> {
@@ -265,18 +250,14 @@ export const register: Register = (on, options) => {
     if (scan.kind === 'none') return next(e)
     if (scan.kind === 'refuse') return { deny: scan.reason }
     const target = scan.target
-    if (target.isAdmin) return { deny: 'merge-gate: --admin bypasses branch rules. The owner never allows it.' }
 
     const verdict = await check($, target, astraRepos)
     if (!verdict.isClean) {
       const list = verdict.problems.map(p => `- ${p}`).join('\n')
       return { deny: `merge-gate: not clean, so not merged.\n${list}${verdict.hint ? `\n${verdict.hint}` : ''}` }
     }
-    if (target.matchHead !== undefined && target.matchHead !== verdict.headSha) {
-      return { deny: `merge-gate: --match-head-commit ${target.matchHead} is not the head that was checked (${verdict.headSha.slice(0, 7)}).` }
-    }
     $.ui.toast(`merge-gate: ${verdict.summary}`)
-    return next({ ...e, command: pinHead(e.command, verdict.headSha) })
+    return next({ ...e, command: mergeCommand(verdict.repo, verdict.number, verdict.headSha, target) })
   }).catch(($, e, next) =>
     next.called
       ? next(e)

@@ -13,15 +13,17 @@ Before any Bash command that runs `gh pr merge`, it reads the PR with `gh pr vie
 - Not a Night Shift PR (its body links `ideas-inbox#17`).
 - On repos listed in `astraRepos`, the body or a comment holds `Astra review: <n> findings`.
 
-It fails closed on any merge it cannot read plainly, and refuses:
+It accepts one form of merge only, and refuses every other command that mentions a merge:
 
-- `--admin` in any form, including `--admin=true`.
-- More than one `gh pr merge` in one command.
-- A merge inside another command (`bash -c "..."`, `$(...)`) or any text with more `pr merge` mentions than plain merges. A commit message or `echo` that only mentions a merge is refused too; write such text with a file tool.
-- A REST merge (`pulls/<n>/merge`) or a GraphQL `mergePullRequest`.
-- `GH_HOST` set in front of the merge. `GH_REPO` in front is read and checked as the repo.
+```sh
+cd <dir> && gh pr merge <number or PR URL> --repo <owner/repo> --squash --delete-branch
+```
 
-When the PR is clean, the command that runs gets `--match-head-commit <checked sha>`, so gh refuses the merge if a push lands between the check and the merge. A `--match-head-commit` already in the command must name the checked head.
+The `cd`, the PR, `--repo`, one of `--squash`/`--merge`/`--rebase` (or `-s`/`-m`/`-r`) and `--delete-branch` (`-d`) are optional. Anything else is refused: `--admin` in any form, `--auto`, a body or subject flag, a second merge, a pipe, quotes, `$`, backslashes, an environment assignment such as `GH_REPO=`, a merge inside `bash -c`, the REST `pulls/<n>/merge` endpoint, GraphQL `mergePullRequest`, and `gh alias`. The check runs on the text with quotes and backslashes removed, so `gh "pr" merge` is caught too. A commit message or `echo` that only mentions a merge is refused as well; write such text with a file tool.
+
+When the PR is clean, the hook does not run the command as typed. It runs one it builds from the checked PR: `gh pr merge <number> --repo <owner/repo> --match-head-commit <checked sha> <method> [--delete-branch]`. So gh merges exactly the PR and head that were checked, and refuses if a push landed in between.
+
+Known gap: an existing gh alias that expands to `pr merge` is not caught. On 2026-10-19 `gh alias list` held only `co: pr checkout`.
 
 When the review is missing, the refusal includes the `coderabbit_budget.py run` command to request one and the `failover` command to run on exit 75.
 
@@ -44,7 +46,7 @@ None. It runs `gh` and two local Python scripts, and makes no model call.
 
 ## Tests
 
-`tests/merge-gate.test.ts` covers command parsing, each bypass the gate refuses, the head pin, the superseded-run rule, each refusal reason, and the Bash hook end to end with a fake `gh`. The live merge path has not been run: the auto-mode classifier refused a test merge of an already-merged PR.
+`tests/merge-gate.test.ts` covers the allowed form, 20 refused forms, the built merge command, the superseded-run rule, each refusal reason, and the Bash hook end to end with a fake `gh`. The live merge path has not been run: the auto-mode classifier refused a test merge of an already-merged PR.
 
 ```sh
 claude plugin test ~/.claude/mods/merge-gate
