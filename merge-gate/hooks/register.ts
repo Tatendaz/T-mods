@@ -32,6 +32,27 @@ const PLAIN_FORM =
   '(an optional `cd <dir> &&` before it). The gate checks that form and runs it pinned to the checked head. ' +
   'If the command only mentions a merge in text, write that text with a file tool.'
 
+const EXPANDS = /[$`\\"'*?[{]/
+
+/**
+ * True when shell expansion could build a `gh` subcommand the text check
+ * cannot see (`gh pr m$(echo erge) 5`, `$GH pr merge`): a segment that runs
+ * gh, or whose command word itself expands, with an expanding character in
+ * its first three words.
+ */
+export function hidesGhVerb(command: string): boolean {
+  for (const segment of command.split(/&&|\|\||;|\n|\|/)) {
+    const w = segment.trim().split(/\s+/).filter(Boolean)
+    while (w.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0]!)) w.shift()
+    const head = w.slice(0, 3)
+    const exe = (w[0] ?? '').replace(/["']/g, '').split('/').pop()
+    // "$HOME/bin/tool" names a literal tool; only an expanding last part could be gh.
+    const exeExpands = /[$`]/.test(exe ?? '')
+    if ((exe === 'gh' || exeExpands) && head.slice(exe === 'gh' ? 1 : 0).some(word => EXPANDS.test(word)) && (exe === 'gh' || head.length > 1)) return true
+  }
+  return false
+}
+
 /**
  * Accepts one form of merge only: optional `cd <dir> &&` segments, then
  * `gh pr merge [<number>|<url>] [--repo <owner/repo>] [--squash|--merge|--rebase]
@@ -40,6 +61,7 @@ const PLAIN_FORM =
  * so nothing the command says beyond these fields reaches gh.
  */
 export function scanMerge(command: string): MergeScan {
+  if (hidesGhVerb(command)) return { kind: 'refuse', reason: PLAIN_FORM }
   if (!MERGE_TEXT.test(command.replace(/["'\\]/g, ''))) return { kind: 'none' }
   if (!PLAIN.test(command)) return { kind: 'refuse', reason: PLAIN_FORM }
 

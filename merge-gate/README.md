@@ -23,7 +23,9 @@ The `cd`, the PR, `--repo`, one of `--squash`/`--merge`/`--rebase` (or `-s`/`-m`
 
 When the PR is clean, the hook does not run the command as typed. It runs one it builds from the checked PR: `gh pr merge <number> --repo <owner/repo> --match-head-commit <checked sha> <method> [--delete-branch]`. So gh merges exactly the PR and head that were checked, and refuses if a push landed in between.
 
-Known gap: an existing gh alias that expands to `pr merge` is not caught. On 2026-10-19 `gh alias list` held only `co: pr checkout`.
+A command that runs `gh`, or whose command word expands (`$GH`), is refused when its first three words hold `$`, a backtick, a quote, a backslash or a glob, so `gh pr m$(echo erge) 5` is caught. A literal tool path such as `"$HOME/bin/tool"` is not affected.
+
+Limits. This is a guardrail against Claude merging by mistake, not a wall against a shell that wants to merge. A script file that runs `gh pr merge`, or an existing gh alias that expands to `pr merge`, is not caught (on 2026-10-19 `gh alias list` held only `co: pr checkout`). The hard stop is a GitHub ruleset that requires the CI checks on `main`.
 
 When the review is missing, the refusal includes the `coderabbit_budget.py run` command to request one and the `failover` command to run on exit 75.
 

@@ -74,6 +74,11 @@ describe('scanMerge', () => {
       'gh api graphql -f query=mutationmergePullRequest',
       'gh alias set m "pr merge"',
       'git commit -m "note: gh pr merge later"',
+      'gh pr m$(echo erge) 5',
+      'gh pr "mer"ge 5',
+      'gh $SUB merge 5',
+      '$GH pr merge 5',
+      'G=gh; $G $P $M 5',
     ]
     for (const command of refused) expect([command, targetOf(command)]).toEqual([command, 'refuse'])
   })
@@ -82,6 +87,9 @@ describe('scanMerge', () => {
     expect(targetOf('gh pr view 138 --json state')).toBe('none')
     expect(targetOf('git merge main')).toBe('none')
     expect(targetOf('echo "$HOME"')).toBe('none')
+    expect(targetOf('gh pr create --title x --body "$(cat body.md)"')).toBe('none')
+    expect(targetOf('gh api repos/Tatendaz/builtby/pulls --jq ".[].number"')).toBe('none')
+    expect(targetOf('"$HOME/.claude/bin/phone-notify" done')).toBe('none')
   })
 
   test('the merge that runs is built from the checked values', () => {
