@@ -1,0 +1,5 @@
+{
+  "name": "compact-keeper",
+  "version": "0.1.0",
+  "description": "Tells every compaction to keep the owner's decisions, approvals, rules and open asks word for word"
+}

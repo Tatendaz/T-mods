@@ -1,0 +1,6 @@
+{
+  "name": "phone-check-nudge",
+  "version": "0.1.0",
+  "description": "After a turn that changed UI files but never looked at them on a simulator, phone or browser, shows a band with a Run check button",
+  "types": "./types/index.d.ts"
+}

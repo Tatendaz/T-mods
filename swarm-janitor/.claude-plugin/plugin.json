@@ -1,0 +1,19 @@
+{
+  "name": "swarm-janitor",
+  "version": "0.1.0",
+  "description": "Every 3 minutes, closes the herdr tab of an idle agent whose worktree PR merged and has nothing uncommitted, and pushes your phone when an agent stays blocked",
+  "userConfig": {
+    "closeMerged": {
+      "type": "boolean",
+      "title": "Close merged agents' tabs",
+      "description": "Close the herdr tab of an idle or done agent once its worktree branch's PR is merged and the worktree has no uncommitted changes.",
+      "default": true
+    },
+    "blockedMinutes": {
+      "type": "number",
+      "title": "Minutes blocked before a phone push",
+      "description": "An agent that waits for an answer this long gets one push through ~/.claude/bin/phone-notify.",
+      "default": 10
+    }
+  }
+}

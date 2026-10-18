@@ -1,0 +1,19 @@
+{
+  "name": "merge-gate",
+  "version": "0.1.0",
+  "description": "Stops gh pr merge until the head is clean: CI green, a real review, no open threads, and the Astra line where a repo needs it",
+  "userConfig": {
+    "astraRepos": {
+      "type": "string",
+      "title": "Repos that need an Astra line",
+      "description": "Comma-separated owner/repo list. A PR there needs \"Astra review: <n> findings\" in its body or a comment.",
+      "default": "Tatendaz/builtby"
+    },
+    "budgetStatus": {
+      "type": "boolean",
+      "title": "CodeRabbit budget in the status line",
+      "description": "Show the next free CodeRabbit slot in the status line, refreshed every 5 minutes.",
+      "default": true
+    }
+  }
+}

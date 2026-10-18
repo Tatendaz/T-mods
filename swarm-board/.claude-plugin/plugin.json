@@ -1,0 +1,6 @@
+{
+  "name": "swarm-board",
+  "version": "0.1.0",
+  "description": "/board opens a live pane of this repo's PRs, today's merges, the herdr agents working on it, and what needs you, with no model call",
+  "types": "./types/index.d.ts"
+}

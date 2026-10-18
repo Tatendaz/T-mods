@@ -12,6 +12,11 @@ My mods for [Claude Code](https://claude.com/claude-code). A mod is a Claude Cod
 | Mod | What it does |
 | --- | --- |
 | [fold-edits](fold-edits/) | Folds every Edit and Write diff, and the diff under a shell command that changed files, into one line, with a green button that opens the diff. |
+| [merge-gate](merge-gate/) | Refuses `gh pr merge` until the head has green CI, a real review, 0 open threads and, on listed repos, an Astra line. Shows the CodeRabbit budget in the status line. |
+| [swarm-board](swarm-board/) | `/board` opens a live pane of the repo's open PRs, merges in the last 24 hours, herdr agents and what needs you. No model call. |
+| [swarm-janitor](swarm-janitor/) | Every 3 minutes, closes the herdr tab of an idle agent whose worktree PR merged, and pushes your phone when an agent stays blocked. |
+| [compact-keeper](compact-keeper/) | Makes every compaction quote your decisions, approvals and open questions word for word. |
+| [phone-check-nudge](phone-check-nudge/) | After a turn that edited UI files and never looked at them, shows a band with a Run check button. |
 
 ## Install
 
