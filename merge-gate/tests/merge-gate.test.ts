@@ -23,13 +23,16 @@ const greenPr = {
   comments: [],
 }
 
-const cleanReview = { action: 'done', looks_clean: true, unresolved_threads: 0, head_sha: HEAD, reason: 'backup review passed' }
+const cleanReview = { action: 'done', looks_clean: true, clean_is_fresh: true, unresolved_threads: 0, head_sha: HEAD, reason: 'backup review passed' }
 
-function fakeGh(pr: object, review: object) {
+function fakeGh(pr: object, review: object, probeArgv: string[][] = []) {
   return ($: unknown, e: { argv: readonly string[] }) => {
     const out = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } })
     if (e.argv[0] === 'gh') return out(JSON.stringify(pr))
-    if (String(e.argv[1]).endsWith('coderabbit_status.py')) return out(JSON.stringify(review))
+    if (String(e.argv[1]).endsWith('coderabbit_status.py')) {
+      probeArgv.push([...e.argv])
+      return out(JSON.stringify(review))
+    }
     return out('{"can_trigger_pr": true}')
   }
 }
@@ -134,6 +137,12 @@ describe('judge', () => {
     expect(verdict.hint).toMatch(/coderabbit_budget\.py failover --repo Tatendaz\/builtby --pr 147/)
   })
 
+  test('a clean verdict from an earlier push is not a review of this head', () => {
+    const stale = judge(greenPr, { ...cleanReview, clean_is_fresh: false }, false)
+    expect(stale.isClean).toBe(false)
+    expect(stale.isClean ? '' : stale.problems.join('\n')).toMatch(/no clean review on head 4b6c221/)
+  })
+
   test('a PR with no CI and a Night Shift PR are never clean', () => {
     const noCi = judge({ ...greenPr, statusCheckRollup: [] }, cleanReview, false)
     expect(noCi.isClean).toBe(false)
@@ -164,6 +173,16 @@ describe('the Bash gate', () => {
     on('process.run', fakeGh(greenPr, cleanReview) as never)
     const ran = (await $.tool.call({ tool: 'Bash', command: 'gh pr merge 147 --repo Tatendaz/builtby --squash' })) as Ran
     expect(denial(ran)).toBeUndefined()
+  })
+
+  test('the review probe judges the PR as it stands, not every comment since it opened', async ($, on) => {
+    bottom(on as never)
+    const probeArgv: string[][] = []
+    on('process.run', fakeGh(greenPr, cleanReview, probeArgv) as never)
+    await $.tool.call({ tool: 'Bash', command: 'gh pr merge 147 --repo Tatendaz/builtby --squash' })
+    const argv = probeArgv[0] ?? []
+    expect(argv).toContain('--since')
+    expect(Number.isNaN(Date.parse(argv.at(argv.indexOf('--since') + 1) ?? ''))).toBe(false)
   })
 
   test('the merge that runs is pinned to the checked head', async ($, on) => {

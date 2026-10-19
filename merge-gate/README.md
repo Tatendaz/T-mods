@@ -7,7 +7,7 @@ Stops `gh pr merge` until the PR's current head meets the merge-when-clean rule.
 Before any Bash command that runs `gh pr merge`, it reads the PR with `gh pr view` and the review state with `~/.claude/skills/tatendaz-github/scripts/coderabbit_status.py`. The merge goes through only when all of these hold:
 
 - Every CI check run is green. Only the newest run of each check counts, so a cancelled first run that a re-run replaced does not block. A head with no CI check at all is refused, because right after a push the checks have not reported yet.
-- `coderabbit_status.py` says `action: done` and `looks_clean: true` for this exact head SHA. That means a real CodeRabbit review or a `review-failover` success, not the bare stamp `@coderabbitai ignore` leaves.
+- `coderabbit_status.py` says `action: done`, `looks_clean: true` and `clean_is_fresh: true` for this exact head SHA. That means a real CodeRabbit review of this head or a `review-failover` success on it, not a clean review of an earlier push and not the bare stamp `@coderabbitai ignore` leaves. The gate runs the probe with `--since <now>`, so it judges the PR as it stands. Without that, the probe counted every bot comment since the PR opened as new, including its replies on resolved threads, and refused any PR that ever had a finding.
 - 0 unresolved review threads.
 - Not a draft, and no merge conflicts.
 - Not a Night Shift PR (its body links `ideas-inbox#17`).

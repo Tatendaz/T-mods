@@ -147,6 +147,7 @@ type Review = {
   action?: string
   reason?: string
   looks_clean?: boolean
+  clean_is_fresh?: boolean
   unresolved_threads?: number | null
   head_sha?: string | null
   rate_limited?: boolean
@@ -181,7 +182,9 @@ export function judge(pr: Pr, review: Review, needsAstra: boolean): Verdict {
   if (!hasCi) problems.push('no CI check has reported on this head yet')
   if (red.length > 0) problems.push(`not green: ${red.slice(0, 5).join(', ')}${red.length > 5 ? ` and ${red.length - 5} more` : ''}`)
 
-  const reviewedHead = review.head_sha === pr.headRefOid
+  // clean_is_fresh = the clean verdict covers this head (CodeRabbit reviewed it, or review-failover passed on it),
+  // not a clean review of an earlier push.
+  const reviewedHead = review.head_sha === pr.headRefOid && review.clean_is_fresh === true
   if (!(review.action === 'done' && review.looks_clean === true && reviewedHead)) {
     problems.push(`no clean review on head ${pr.headRefOid.slice(0, 7)}: ${review.reason ?? review.action ?? 'unknown'}`)
     hint =
@@ -225,9 +228,12 @@ async function check($: EngineInterface, target: MergeTarget, astraRepos: string
     cwd,
   )
   const repo = pr.url.match(/github\.com\/([^/]+\/[^/]+)\/pull/)?.[1] ?? target.repo ?? ''
+  // --since now: the gate judges the PR as it stands (open threads, a fresh verdict on this head). Without it the
+  // probe counts every bot comment since the PR opened as new, including its replies on threads already resolved,
+  // and answers `address` forever on any PR that ever had a finding.
   const review = await json<Review>(
     $,
-    ['python3', `${await home($)}/${SCRIPTS}/coderabbit_status.py`, '--repo', repo, '--pr', String(pr.number)],
+    ['python3', `${await home($)}/${SCRIPTS}/coderabbit_status.py`, '--repo', repo, '--pr', String(pr.number), '--since', new Date().toISOString()],
     cwd,
   )
   return judge(pr, review, astraRepos.includes(repo.toLowerCase()))
