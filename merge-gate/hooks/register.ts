@@ -22,8 +22,9 @@ export type MergeTarget = {
 
 export type MergeScan = { kind: 'none' } | { kind: 'refuse'; reason: string } | { kind: 'merge'; target: MergeTarget }
 
-// Anything that looks like a merge once quotes and backslashes are gone.
-const MERGE_TEXT = /\bpr\s+merge\b|mergePullRequest|\/merge\b|\bgh\s+alias\b/i
+// Anything that looks like a merge once quotes and backslashes are gone, including the API
+// routes that merge without `gh pr merge`: REST /merges, GraphQL mergeBranch and auto-merge.
+const MERGE_TEXT = /\bpr\s+merge\b|mergePullRequest|enablePullRequestAutoMerge|mergeBranch|\/merges?\b|\bgh\s+alias\b/i
 // What a plain merge command may hold: no expansion, substitution, quoting or redirection.
 const PLAIN = /^[A-Za-z0-9_./~:@=,+\- \n&;]*$/
 
