@@ -19,7 +19,7 @@ It accepts one form of merge only, and refuses every other command that mentions
 cd <dir> && gh pr merge <number or PR URL> --repo <owner/repo> --squash --delete-branch
 ```
 
-The `cd`, the PR, `--repo`, one of `--squash`/`--merge`/`--rebase` (or `-s`/`-m`/`-r`) and `--delete-branch` (`-d`) are optional. Anything else is refused: `--admin` in any form, `--auto`, a body or subject flag, a second merge, a pipe, quotes, `$`, backslashes, an environment assignment such as `GH_REPO=`, a merge inside `bash -c`, the REST `pulls/<n>/merge` and `merges` endpoints, GraphQL `mergePullRequest`, `mergeBranch` and `enablePullRequestAutoMerge`, and `gh alias`. The check runs on the text with quotes and backslashes removed, so `gh "pr" merge` is caught too. A commit message or `echo` that only mentions a merge is refused as well; write such text with a file tool.
+The `cd`, the PR, `--repo`, one of `--squash`/`--merge`/`--rebase` (or `-s`/`-m`/`-r`) and `--delete-branch` (`-d`) are optional. Anything else is refused: `--admin` in any form, `--auto`, a body or subject flag, a second merge, a pipe, quotes, `$`, backslashes, an environment assignment such as `GH_REPO=`, a merge inside `bash -c`, the REST `pulls/<n>/merge` and `merges` endpoints, GraphQL `mergePullRequest`, `mergeBranch`, `enablePullRequestAutoMerge` and `enqueuePullRequest`, and `gh alias`. The check runs on the text with quotes and backslashes removed, so `gh "pr" merge` is caught too. A commit message or `echo` that only mentions a merge is refused as well; write such text with a file tool.
 
 When the PR is clean, the hook does not run the command as typed. It runs one it builds from the checked PR: `gh pr merge <number> --repo <owner/repo> --match-head-commit <checked sha> <method> [--delete-branch]`. So gh merges exactly the PR and head that were checked, and refuses if a push landed in between.
 
@@ -48,7 +48,7 @@ None. It runs `gh` and two local Python scripts, and makes no model call.
 
 ## Tests
 
-`tests/merge-gate.test.ts` covers the allowed form, 28 refused forms, the built merge command, the superseded-run rule, each refusal reason, and the Bash hook end to end with a fake `gh`. The live merge path has not been run: the auto-mode classifier refused a test merge of an already-merged PR.
+`tests/merge-gate.test.ts` covers the allowed form, 29 refused forms, the built merge command, the superseded-run rule, each refusal reason, and the Bash hook end to end with a fake `gh`. The live merge path has not been run: the auto-mode classifier refused a test merge of an already-merged PR.
 
 ```sh
 claude plugin test ~/.claude/mods/merge-gate

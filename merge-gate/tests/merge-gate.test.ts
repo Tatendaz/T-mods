@@ -78,6 +78,7 @@ describe('scanMerge', () => {
       'gh api -X POST repos/Tatendaz/builtby/merges -f base=main -f head=feat/x',
       'gh api graphql -f query=mutation{enablePullRequestAutoMerge(input:{pullRequestId:PR_1}){clientMutationId}}',
       'gh api graphql -f query=mutation{mergeBranch(input:{repositoryId:R_1,base:main,head:feat/x}){clientMutationId}}',
+      'gh api graphql -f query=mutation{enqueuePullRequest(input:{pullRequestId:PR_1}){clientMutationId}}',
       'gh alias set m "pr merge"',
       'git commit -m "note: gh pr merge later"',
       'gh pr m$(echo erge) 5',
